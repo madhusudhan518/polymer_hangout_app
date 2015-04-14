@@ -1,0 +1,26 @@
+<link rel="import" href="../polymer/polymer.html">
+<link rel="import" href="hangout-app.html">
+
+<polymer-element name="demo-hangout-app" extends="hangout-app">
+
+  <template>
+    <b>Polymer Hangout App</b><br><br>
+    <template if="{{ loaded }}">
+      <hangout-shared-state name="count" value="{{count}}"></hangout-shared-state>
+      <button on-click="{{click}}">Click me!</button> <b>{{count}}</b>
+    </template>
+  </template>
+
+  <script>
+    (function (global) {
+      Polymer('demo-hangout-app', {
+        readyCallback: function () {
+          global.console.log("demo-hangout-app ready");
+        },
+        count: 0,
+        click: function () { this.count++; }
+      });
+    }(this));
+  </script>
+
+</polymer-element>

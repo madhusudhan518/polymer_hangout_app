@@ -1,0 +1,199 @@
+<link rel="import" href="../polymer/polymer.html">
+
+<!--
+Makes Hangout App development easier.
+Waits for the Hangouts API to be ready before calling a `readyCallback` function
+that can be overwritten. To use it create your own custom element extending the
+`hangout-app` element
+
+##### Example
+
+    <polymer-element name="demo-hangout-app" extends="hangout-app">
+        ...
+    </polymer>
+
+You will need several files to run the Hangout App.
+
++  Your custom hangout app element, extending `hangout-app`
+   [(sample)](https://github.com/Scarygami/hangout-app/blob/master/demo-hangout-app.html)
+
++  A website including your custom element and the Hangout JS scripts:
+   [(sample)](https://github.com/Scarygami/hangout-app/blob/master/demo_hangout.html)
+
+
+    <script src="//plus.google.com/talkgadget/apps/gadgets/js/rpc.js"></script>
+    <script src="//plus.google.com/hangouts/_/api/v1/hangout.js"></script>
+
++  A gadget-xml file, that loads your website in an iFrame and links it to the Hangout.
+   You can create one via [hangoutiframer](https://hangoutiframer.appspot.com/static/help.html)
+   or make a copy of [demo_hangout.xml](https://github.com/Scarygami/hangout-app/blob/master/demo_hangout.xml)
+   and adjust the URL in line 28 accordingly
+
+You then have to follow the [official instructions](https://developers.google.com/+/hangouts/running)
+to enable your application.
+
+@element hangout-app
+@blurb Element making Hangout App development easier.
+@status alpha
+@homepage https://scarygami.github.io/hangout-app
+-->
+<polymer-element name="hangout-app">
+  <script>
+    (function (global) {
+      Polymer('hangout-app', {
+        /**
+         * `loaded` is set to true once everything is ready.
+         *
+         * @property loaded
+         * @type bool
+         */
+        loaded: false,
+
+        /**
+         * `readyCallback` is called once everything is ready.
+         * Should be overwritten in your custom hangout-app element.
+         *
+         * @method readyCallback
+         */
+        readyCallback: function () {
+          global.console.log("hangout-app ready");
+        },
+
+        attached: function () {
+          var interval = global.setInterval(function () {
+            // Make sure all scripts are loaded
+            if (
+              global.gapi && global.gapi.hangout &&
+              global.gapi.hangout.onApiReady &&
+              global.gadgets && global.gadgets.rpc
+            ) {
+              global.clearInterval(interval);
+              global.console.log("Hangouts Library loaded");
+              
+              global.gapi.hangout.onApiReady.add(function (event) {
+                if (event.isApiReady) {
+                  global.console.log("Hangouts API Ready");
+                  this.loaded = true;
+                  this.readyCallback();
+                }
+              }.bind(this));
+            }
+          }.bind(this), 10);
+        }
+      });
+    }(this));
+  </script>
+</polymer-element>
+
+
+<!--
+`hangout-shared-state` allows access to one key/value pair of the shared state
+in a hangout app.
+
+You can pass in anything as `value` that can be transformed into a string via
+`JSON.stringify` because, the Hangouts API only allows string-string pairs
+for the shared state. The element will try to encode/decode the value accordingly.
+
+Note that if value is an object the shared state will only be updated when value
+is a different instance. Changes on object properties won't trigger the update.
+
+##### Example
+
+    <hangout-shared-state name="count" value="{{count}}"></hangout-shared-state>
+
+@element hangout-shared-state
+@blurb Element for access to the shared state of a Hangout app.
+@status alpha
+@homepage https://scarygami.github.io/hangout-app
+-->
+<polymer-element name="hangout-shared-state" attributes="name value">
+  <script>
+    (function (global) {
+      var
+        loaded = false,
+        currentValue = undefined;
+
+      Polymer('hangout-shared-state', {
+        /**
+         * Name of the key to access
+         * @attribute name
+         * @type string
+         * @required
+         */
+        name: "",
+
+        /**
+         * Value of the data in the shared state, can be used for two-way binding
+         * @attribute value
+         * @type any
+         * @required
+         */
+        value: undefined,
+
+        valueChanged: function () {
+          if (!loaded) {
+            return;
+          }
+          if (this.value !== currentValue) {
+            currentValue = this.value;
+            if (this.value === null || this.value === undefined) {
+              global.gapi.hangout.data.clearValue(this.name);
+            } else {
+              global.gapi.hangout.data.setValue(this.name, JSON.stringify(this.value));
+            }
+          }
+        },
+
+        attached: function () {
+          var tmp;
+          if (!global.gapi || !global.gapi.hangout) {
+            throw "Hangouts API not loaded...";
+          }
+          currentValue = this.value;
+          this.name = this.name || "";
+
+          tmp = global.gapi.hangout.data.getValue(this.name);
+          if (tmp === null || tmp === undefined) {
+            currentValue = undefined;
+            loaded = true;
+            this.valueChanged();
+          } else {
+            try {
+              currentValue = JSON.parse(tmp);
+            } catch (err) {
+              currentValue = tmp;
+            }
+            this.value = currentValue;
+          }
+
+          global.gapi.hangout.data.onStateChanged.add(function (e) {
+            var i;
+            if (e.addedKeys) {
+              for (i = 0; i < e.addedKeys.length; i++) {
+                if (e.addedKeys[i].key === this.name) {
+                  try {
+                    currentValue = JSON.parse(e.addedKeys[i].value);
+                  } catch (err) {
+                    currentValue = e.addedKeys[i].value;
+                  }
+                  this.value = currentValue;
+                  break;
+                }
+              }
+            }
+            if (e.removedKeys) {
+              for (i = 0; i < e.removedKeys.length; i++) {
+                if (e.removedKeys[i] === this.name) {
+                  currentValue = undefined;
+                  this.value = undefined;
+                  break;
+                }
+              }
+            }
+          }.bind(this));
+          loaded = true;
+        }
+      });
+    }(this));
+  </script>
+</polymer-element>
